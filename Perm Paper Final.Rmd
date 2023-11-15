@@ -267,4 +267,57 @@ In order to merge the two data sets (continents and corruption.data), had to mak
 
 Note: The merging data set is not wholesome because the corruption data does not have data for every country from 1996-2022. Some countries got their first corruption score as late as 2004. This has some impact on further visualization of continents. 
 
-No more space in the RMarkdown file, so had to add a extra file to make it possible to view the last visualization of the continents (see extra file "Extra TP").  
+```{r}
+##The interactive plot for continents
+##Set the starting year for the average score
+start_year <- 1996
+
+##Get unique values from "Continent" column
+continents <- unique(merge.corrupt$Continent)
+
+##Create a new data set to store the results + specifed the vector type
+cnt_avg_corrupt <- data.frame(Continent = character(),
+                   Year = integer(),
+                   avg_corruption = double())
+
+##Loop through each continent and calculate the average score of corruption
+for (i in 1:length(continents)) {
+##Subset the data for the current continent
+  subset_data <- subset(merge.corrupt, Continent == continents[i])
+  
+##Get the minimum and maximum year with data for the current continent
+  min_year <- min(subset_data$Year, na.rm = T)
+  max_year <- max(subset_data$Year, na.rm = T)
+  
+##Calculate the average score of corruption for each year >= start_year
+  for (j in start_year:max_year) {
+##Check if the current year has data for the current continent
+    if (j >= min_year) {
+      avg_score <- mean(subset_data$corrupt[subset_data$Year == j & !is.na(subset_data$corrupt)])
+      
+##Add the result to the new data set
+      if (!is.na(avg_score)) {
+        cnt_avg_corrupt[nrow(cnt_avg_corrupt) + 1, ] <- c(continents[i], j, avg_score)
+      }
+    } else {
+##Set the average score to NA if the current year has no data
+      cnt_avg_corrupt[nrow(cnt_avg_corrupt) + 1, ] <- c(continents[i], j, NA)
+    }}}
+
+summary(cnt_avg_corrupt)
+
+## Saw that years and avg_corruption was stored as characters so changed to numeric 
+cnt_avg_corrupt$Year <- as.numeric(cnt_avg_corrupt$Year)
+cnt_avg_corrupt$avg_corruption <- as.numeric(cnt_avg_corrupt$avg_corruption)
+
+##Making interactive plot for the continents
+library(highcharter)
+library(dplyr)
+
+hchart(cnt_avg_corrupt, "line", hcaes(x = Year, y = avg_corruption, group = Continent)) %>%
+  hc_xAxis(title = list(text = "Year", style = list(fontSize = "18px"))) %>%
+  hc_yAxis(title = list(text = "Corruption score", style = list(fontSize = "18px")), 
+           min = 0, max = 100)%>%
+  hc_title(text="Average corruption score by continent",style = list(fontSize = "30px", fontFamily = "Avenir"))%>%
+  hc_tooltip(valueDecimals = 2)
+```
