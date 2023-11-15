@@ -1,0 +1,270 @@
+---
+title: "Term Paper"
+output: html_document
+date: "Candidate number: 161"
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Description of project
+
+The goal for this term paper is to look at voter turnout and corruption values in the world, and evaluate different aspects of the data set. First is to find the correlation between voter turnout and corruption, to see whether a country with high voter turnout shows lower sign of corruption than other counties. In addition the projects goes further on the visualization of the corruption data. This includes viewing how the evolved of corruption by continents has changed, if we see a positive or negative trend.  
+
+## Sources
+
+The voter turnout dataset (VT) is gotten from the international organization [International IDEA](https://www.idea.int/data-tools/data/voter-turnout-database). Voter turnout is the percentage of eligible voters who participate in an election. It reflects citizens' engagement and trust in the democratic process. High turnout is seen as positive, while low turnout can indicate disinterest or lack of trust in the government. Various factors influence turnout, such as laws, parties, education, and mobilization efforts. Most governments and organizations work to encourage higher turnout through campaigns and incentives. 
+
+One issue with the VT data set is the missing values from some of the biggest countries, such as China and Egypt. Due to lack of public federal transparency. Another element in the data worth mentioning is that some countries have election more frequently than others doe to turmoil within the country, or reelections.
+
+The [corruption dataset](https://databank.worldbank.org/source/worldwide-governance-indicators) has data from 1996 to 2023. It values a country´s level of corruption from 0 (very corrupted) to 100 (very clean). The calculation (CPI) combines many different manifestations of corruption into one indicator. Some of the element they take to account in the calculation is bribery, diversion of public funds Officials using their public office for private gain without facing consequences or ability of governments to contain corruption in the public sector.
+
+## Cleaing datasets
+
+```{r cars}
+library(dplyr)
+library(tidyverse)
+library(readr)
+library(tidyr)
+library(readxl)
+
+### Voter Turnout dataset
+
+Voter_turnout_original <-read_excel("idea_export_voter_turnout_database_region.xlsx")
+
+Voter_turnout_original$`Voter Turnout` <- gsub("%", "", Voter_turnout_original$`Voter Turnout`)
+Voter_turnout_original$`Voter Turnout` <- as.numeric(Voter_turnout_original$`Voter Turnout`)/100
+
+Voter_turnout_original <- Voter_turnout_original %>%
+  select(Country, ISO3, Year, `Voter Turnout`) %>%
+  mutate(Year = as.integer(format(strptime(Year, "%Y-%m-%d"), "%Y")))
+
+
+#####################
+##Corruption dataset
+#####################
+library(readr)
+corruption.data <- read_csv("c2a74590-6dc3-406c-a3cb-4bec648e36b5_Series - Metadata.csv")
+
+corruption.data <- corruption.data[-c(215:221), ]  ##Removing last rows with text info
+
+corruption.data <- corruption.data%>%
+  rename(ISO3=`Country Code`, Country=`Country Name`)
+
+
+##The columns for the years go from 3:26 in the datset
+colnames(corruption.data)[c(1, 3:28)] <- gsub("\\[YR.*\\]", "", colnames(corruption.data)[c(1, 3:28)])
+
+corruption.data <- corruption.data%>%
+  select(Country,ISO3,c(1,5:28))
+
+
+##Change layout on dataset
+corruption.data <- pivot_longer(corruption.data, cols = -c(Country, ISO3), names_to = "Year", values_to = "corrupt")
+
+corruption.data <- corruption.data %>%
+  mutate(corrupt = ifelse(corrupt == "..", NA, corrupt)) %>%
+  na.omit()
+
+```
+
+Explanation of code:
+
+**The voter turnout dataset (VT)**
+
+The data set had values written in percentage (%) and not as decimals. Used `gsub` to remove the % sign, so it became easier to calculate values. Since the variable "Voter Turnout" was a character, it had to be changed to numeric and then divided by 100 to get a number for percentage possible to calculate with. Changed from (example) 37,35% to 0.3735.
+
+Selected out the variables I wanted to focus on and tweaked the column for years. The values for years were written as the election day, with day, mount and year. Filtered that out to only have years, so it was possible to merge with the other data set.  Since years are whole numbers I used `as.intreger` to change format.
+
+**Corruption data**
+
+Selected same values as in the VT data set. Values for years was written as 1999 [YR1999], so had `gsub` to remove the [] to only have Years left.  Changed layout on the data set to equal VT, with the country repeated the same number of times as years represented using `pivot_longer`. Additionally, the NA values were written as ".." in the data set, so used `ifelse` to indicate that if it was a ".." in the data set it replicated a NA. finally removed the NA in the data set with `na.omit()`.
+
+### Summary of the two data sets
+
+Short overview of the data sets
+
+```{r pressure, echo=FALSE}
+summary(Voter_turnout_original)
+summary(corruption.data)
+```
+
+### Merging
+
+```{r}
+##########################
+##merging the two data sets
+##########################
+
+Voter_turnout_original$Year <- as.numeric(Voter_turnout_original$Year)
+corruption.data$Year <- as.numeric(corruption.data$Year)
+
+merge.nr1 <- inner_join(Voter_turnout_original, corruption.data, by = c("Country", "Year", "ISO3"))%>%
+  na.omit()
+
+
+#######################
+##Find the correlation
+######################
+
+merge.nr1 <- merge.nr1 %>%
+  mutate(corr = `Voter Turnout`, corrupt) %>%
+  group_by(Year, Country) %>%
+  mutate(avg_corr = mean(corr))
+
+```
+
+Explanation:
+
+**Merging and correlation**
+
+First, I had to change the type of value for Year so the two data sets matched each other, so they both become numeric. Merged them with `inner_join` by the common columns "Country", "Year" and "ISO3".
+
+Found the correlation using `corr()` and the two variables, grouped by year and country. Made a new column for the average correlation for each country. Made a new data set for this information, to indicate the average correlation between VT and corruption from 1996-2022. Resulted in the new data set correlation_avg.
+
+# World map of correlation between voter turnout and corruption
+
+```{r}
+
+library(tidyverse)
+library(rnaturalearth)
+library(sf)
+library(wbstats)
+library(ggplot2)
+
+##first need to make a new data set with the average
+correlation_avg <- merge.nr1 %>%
+  group_by(Country, ISO3) %>%
+  summarize(avg_corr = mean(corr))
+
+world <- ne_countries(scale = "medium", returnclass = "sf")%>%
+  filter(admin!="Antarctica")
+
+target_crs <- "+proj=moll"
+
+word_moll <- world%>%
+  st_transform(crs=target_crs)%>%
+  rename(ISO3=iso_a3)
+
+word_moll%>%
+  left_join(correlation_avg, by="ISO3")%>%
+  ggplot()+
+  geom_sf(aes(fill=avg_corr))+
+  scale_fill_gradient(low = "paleturquoise", high = "steelblue4") +
+  labs(title = "Correlation between Voter Turnout and Corruption", fill= "Correlation",caption = "Note: The data is based on the average correlation\nbetween voter turnout and corruption from historical\nelection years from 1996 to today.")+
+  theme(plot.title = element_text(size = 19, hjust = 0.5, family = "Avenir"),
+        plot.caption = element_text(hjust = 0))
+
+```
+
+Explanation:
+
+Downloaded the needed packages to make the map. Made a world map, that filtered "Antarctica" out. target_crs \<- "+proj=moll" specifies a new target projection as a Mollweide projection, which preserves equal area, for the map. World_moll transforms the world data to the Mollweide projection using the `st_transform()` function. Renamed the "iso_a3" column to "ISO3" to match the "ISO3" column in the "correlation_avg" data set.
+
+Use the new object world_moll and merge with the "correlation_avg" data set to get the data for average correlation between VT and corruption from the world countries. Made a ggplot() with the fill, from the avg_corr column in the data set. Changing color and titles to make it aesthetic better to watch. Added a `caption=` to underline what the numbers behind the correlation shows.
+
+# The app in R Shiny
+
+```{r}
+
+library(shiny)
+library(ggplot2)
+library(shinythemes)
+
+
+##Define ui
+ui <- fluidPage(titlePanel("Historical corruption levles"),
+                sidebarLayout(
+                  sidebarPanel(
+                    selectInput("country",
+                                "Choose a country:",
+                                choices = unique(corruption.data$Country)),
+                    helpText("The corruption index represents the perceived levels of public sector corruption, scoring on a scale of 0 (highly corrupt) to 100 (very clean)")
+                  ),
+                  mainPanel(
+                    plotOutput("corruption_plot")
+                  )
+                )
+)
+
+##Define the server
+server <- function(input, output) {
+  
+  # Filter the data based on the selected country
+  country_data <- reactive({
+    corruption.data %>%
+      filter(Country == input$country) %>%
+      mutate(corrupt = as.numeric(corrupt)) # Convert corrupt to numeric
+  })
+  
+  ##Create the plot
+  output$corruption_plot <- renderPlot({
+    ggplot(country_data(), aes(x = Year, y = corrupt, group = 1)) +
+      geom_line(color="royalblue", size=2) +
+      labs(title = paste(input$country, "- Corruption over time"),
+           x = "Year",
+           y = "Corruption Index")+
+      theme_light()+
+      theme(plot.title = element_text(size = 25, hjust = 0.5, family = "Avenir")) +
+      scale_x_continuous(breaks = seq(1996, 2022, 2)) +
+      scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, 10))
+  })
+}
+
+
+##Run the app
+shinyApp(ui, server)
+```
+
+Explanation code:
+
+Started making the ui. Using `fluidPage` to make it possible to have a sidebar layout. The input was "country" what they could select in the sidebar penal. The output was going to be the historical line from the `gg_plot` made in the server.  Defined the server with input and output, where output was the historical line for corruption from 1996-2022. Created a regular ggplot, using the `geom_line` to get the line. Adjusting the aesthetics on the ggplot, to make it look better in the app.
+
+# Corruption by continent
+
+Downloaded the file for continents from [World data](https://ourworldindata.org/grapher/continents-according-to-our-world-in-data)
+
+```{r}
+library(dplyr)
+
+##Make a new column for continent
+##Rename "ANT" to "NLD" in the ISO3 column to make it fit when mergin with continent dataset
+corruption.data$ISO3 <- gsub("ANT", "NLD", corruption.data$ISO3)
+
+
+##############################################
+##Merg continent dataset with corruption data
+##############################################
+
+continents_according_to_our_world_in_data <- read_csv("~/Desktop/continents-according-to-our-world-in-data.csv")
+
+
+## Change name to match merging
+continents_according_to_our_world_in_data<- continents_according_to_our_world_in_data%>%
+  dplyr::rename(Country = Entity, ISO3 = Code)
+
+continents_according_to_our_world_in_data<- continents_according_to_our_world_in_data%>%
+  select(Country,ISO3,Continent)
+  
+
+merge.corrupt <- left_join(corruption.data,continents_according_to_our_world_in_data, by= "ISO3")
+
+library(dplyr)
+##Note: The dataset is not wholesome meaning that some values are missing within a country. Some countries did not get a corruption score until long after the first start in 1996.  
+
+merge.corrupt <- merge.corrupt%>%
+  select(Country.x,ISO3,Continent,Year,corrupt)%>%
+  dplyr::rename(Country=Country.x) ##had to specify th dplyr to change name on column
+
+##See that values for corruption is listed as a character. Changes to numeric
+merge.corrupt$corrupt <- as.numeric(merge.corrupt$corrupt)
+```
+Explaining code:
+
+In order to merge the two data sets (continents and corruption.data), had to make som changes so the where similar. Had to use `dplyr::rename`in order for it to get it to change the names. 
+
+Note: The merging data set is not wholesome because the corruption data does not have data for every country from 1996-2022. Some countries got their first corruption score as late as 2004. This has some impact on further visualization of continents. 
+
+No more space in the RMarkdown file, so had to add a extra file to make it possible to view the last visualization of the continents (see extra file "Extra TP").  
