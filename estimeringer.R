@@ -1,9 +1,13 @@
-##Estimere corruption rate
+##Estimationg corruption rate
 
 # Load required libraries
 library(tidyverse)
 library(tidymodels)
 library(dplyr)
+
+############################################
+##Downloading and fixing the data set again
+############################################
 
 corruption_data <- read_csv("c2a74590-6dc3-406c-a3cb-4bec648e36b5_Series - Metadata.csv")
 corruption.data <- corruption_data[-c(215:221), ]  ##Removing last rows with text info
