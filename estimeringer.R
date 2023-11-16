@@ -1,4 +1,4 @@
-##Estimationg corruption rate
+##Estimationg corruption score
 
 # Load required libraries
 library(tidyverse)
@@ -12,28 +12,38 @@ library(dplyr)
 corruption_data <- read_csv("c2a74590-6dc3-406c-a3cb-4bec648e36b5_Series - Metadata.csv")
 corruption.data <- corruption_data[-c(215:221), ]  ##Removing last rows with text info
 
+
+ # Renaming columns for easier coding
 corruption.data <- corruption.data%>%
   dplyr::rename(ISO3=`Country Code`, Country=`Country Name`)
 
 
-##The columns for the years go from 3:26 in the datset
+##The columns for the years goes from 3:26 in the data set
 colnames(corruption.data)[c(1, 3:28)] <- gsub("\\[YR.*\\]", "", colnames(corruption.data)[c(1, 3:28)])
 
 corruption.data <- corruption.data%>%
   select(Country,ISO3,c(1,5:28))
 
 
-##Change layout on dataset
+##Change layout on data set
 corruption.data <- pivot_longer(corruption.data, cols = -c(Country, ISO3), names_to = "Year", values_to = "corrupt")
+
+ # Removes NA, because Na= .. in data set, use ifels to change and remove the NA in corrupt column
 
 corruption.data <- corruption.data %>%
   mutate(corrupt = ifelse(corrupt == "..", NA, corrupt)) %>%
   na.omit()
 
+ # Change vector
+
 corruption.data$Year <- as.numeric(corruption.data$Year)
 corruption.data$corrupt <- as.numeric(corruption.data$corrupt)
 
-# Machine learning
+
+
+##########################
+##Estimate corruption rate
+##########################
 
 library(tidyverse)
 library(glmnet)
@@ -42,11 +52,9 @@ forcast_data <- corruption.data%>%
   select(Country,Year,corrupt)
 
  # Setting seed
-
 set.seed(123456)
 
-
-# create a list to store the predicted corruption values for each country
+ # create a list to store the predicted corruption values for each country
 predictions_list <- list()
 
 ##########################################
@@ -120,11 +128,12 @@ optimal_lambda <- 0.0000000001
 
 
 
-#################################
-## Estimating the corruption rate
-#################################
+##################################
+## Estimating the corruption score
+##################################
 
-# Split the data into training and testing sets, splitting it by date to fit better
+ # Split the data into training and testing sets, splitting it by date to fit better
+ # make training set until 2018, and the rest are test
 
 split_date <- 2018
 dt_train <- country_data%>%
@@ -137,11 +146,11 @@ dt_test <- country_data%>%
 unique_countries <- unique(forcast_data$Country)
 for (Country in unique_countries) {
   
-  # Subset the data for the current country
+  # Subset the data for the current country, change charterers to factors so possible to estimate
   country_data <- forcast_data %>% 
     mutate_if(is.character, as.factor)
   
-  # Fit ols model
+  # Fit ols model with the column for what i want to predict (corrupt, which indicates corruption score)
   ols_fit <- linear_reg()%>%
   set_engine("lm")%>%
   fit(corrupt~.,data=dt_train)
@@ -159,7 +168,7 @@ for (Country in unique_countries) {
     add_model(lasso_spec) %>%
     fit(data = dt_train)
 
-# Make predictions 
+# Make predictions and change name
   ols_pred <- predict(ols_fit,dt_test) %>% 
   dplyr::rename(ols_pred = .pred)
   
