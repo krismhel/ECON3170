@@ -293,7 +293,7 @@ for (i in 1:length(continents)) {
   for (j in start_year:max_year) {
 ##Check if the current year has data for the current continent
     if (j >= min_year) {
-      avg_score <- mean(subset_data$corrupt[subset_data$Year == j & !is.na(subset_data$corrupt)])
+      avg_score <- mean(subset_data$corrupt[subset_data$Year == j], na.rm=TRUE)
       
 ##Add the result to the new data set
       if (!is.na(avg_score)) {
