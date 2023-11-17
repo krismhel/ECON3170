@@ -1,4 +1,4 @@
-##Estimationg corruption score
+##Estimating corruption score
 
 # Load required libraries
 library(tidyverse)
