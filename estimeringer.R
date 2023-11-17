@@ -68,7 +68,7 @@ lasso_mod <- linear_reg(mixture = 1, penalty = .1) %>%
   set_engine("glmnet")
 
  #Make recipe with the vector wanting to estimate (corrupt)
- # make a nomial as dummies fit in the estimation calculations 
+ # Make a nominal as dummies to fit in the estimation calculations 
 
 rec <- recipe(corrupt~.,data=dt_train)%>%
   step_dummy(all_nominal())
@@ -184,11 +184,25 @@ for (Country in unique_countries) {
 view(predictions_list)
 view(predictions_list[[Country]])
 
- # Rename the data set
+
+# Rename the data set
 
 corruption_pred<- predictions_list[[Country]]
 view(corruption_pred)
 
+
+
+ # Calculate estimate error 
+
+corruption_pred <- corruption_pred%>%
+  mutate(ols_error=corrupt-(ols_pred),
+         lasso_error=corrupt-(lasso_pred))
+
+ # Make a metrics to find the best estimate
+
+metrics <- metric_set(rmse, rsq, mae, msd)
+metrics(corruption_pred,truth = corrupt, estimate = lasso_pred)
+metrics(corruption_pred,truth = corrupt, estimate = ols_pred)
 
 
 
